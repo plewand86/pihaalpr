@@ -1,0 +1,325 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ImageOff, Loader2, Trash2 } from 'lucide-react'
+import { format } from 'date-fns'
+
+import { Camera, Detection, clearDetections, getCameras, getDetections, getMotionFrameUrl, getSnapshotUrl } from '../api/client'
+
+interface MotionEvent {
+  cam_id: number
+  cam_name: string
+  pct: number
+  status?: string
+  message?: string
+}
+
+type PreviewState = 'loading' | 'ok' | 'error'
+
+const CAMERAS_REFRESH_MS = 5000
+const DETECTIONS_REFRESH_MS = 1000
+const SNAPSHOT_REFRESH_MS = 5000
+const LIVE_FRAME_POLL_MS = 500
+const LIVE_FRAME_ERROR_AFTER_MS = 4000
+
+function clearCanvas(canvas: HTMLCanvasElement | null) {
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+}
+
+async function drawBlobToCanvas(canvas: HTMLCanvasElement, blob: Blob) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(blob)
+    try {
+      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+      }
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      return
+    } finally {
+      bitmap.close()
+    }
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve()
+      } catch (err) {
+        reject(err)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Nie udalo sie narysowac podgladu RTSP'))
+    }
+    img.src = url
+  })
+}
+
+function SnapshotPreview({ cameraId, cameraName }: { cameraId: number; cameraName: string }) {
+  const [refreshTs, setRefreshTs] = useState(Date.now())
+  const [state, setState] = useState<PreviewState>('loading')
+
+  useEffect(() => {
+    setState('loading')
+    const timer = window.setInterval(() => {
+      setState('loading')
+      setRefreshTs(Date.now())
+    }, SNAPSHOT_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [cameraId])
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-lg bg-black/40 flex items-center justify-center min-h-40 relative overflow-hidden">
+        {state === 'loading' && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 size={24} className="animate-spin text-gray-600" />
+          </div>
+        )}
+        {state === 'error' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-600">
+            <ImageOff size={28} />
+            <span className="text-xs">Brak obrazu z tej kamery</span>
+          </div>
+        )}
+        <img
+          key={`${cameraId}-${refreshTs}`}
+          src={`${getSnapshotUrl(cameraId)}?t=${refreshTs}`}
+          alt={`snapshot ${cameraName}`}
+          className={`max-w-full rounded-lg transition-opacity duration-200 ${state === 'ok' ? 'opacity-100' : 'opacity-0 absolute'}`}
+          onLoad={() => setState('ok')}
+          onError={() => setState('error')}
+        />
+      </div>
+      <p className="text-[11px] text-gray-500">Snapshot odswiezany co {SNAPSHOT_REFRESH_MS / 1000}s bez wyzwalania analityki.</p>
+    </div>
+  )
+}
+
+function RtspPreview({ cameraId, runtime }: { cameraId: number; runtime?: MotionEvent }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [state, setState] = useState<PreviewState>('loading')
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | null = null
+    const startedAt = Date.now()
+
+    setState('loading')
+    clearCanvas(canvasRef.current)
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`${getMotionFrameUrl(cameraId)}?ts=${Date.now()}`, { cache: 'no-store' })
+        if (response.ok) {
+          const blob = await response.blob()
+          const canvas = canvasRef.current
+          if (!cancelled && canvas) {
+            await drawBlobToCanvas(canvas, blob)
+            setState('ok')
+          }
+        } else if (!cancelled && Date.now() - startedAt >= LIVE_FRAME_ERROR_AFTER_MS) {
+          setState('error')
+        }
+      } catch {
+        if (!cancelled && Date.now() - startedAt >= LIVE_FRAME_ERROR_AFTER_MS) {
+          setState('error')
+        }
+      } finally {
+        if (!cancelled) {
+          timer = window.setTimeout(poll, LIVE_FRAME_POLL_MS)
+        }
+      }
+    }
+
+    void poll()
+
+    return () => {
+      cancelled = true
+      if (timer !== null) window.clearTimeout(timer)
+      clearCanvas(canvasRef.current)
+    }
+  }, [cameraId])
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-lg bg-black/40 flex items-center justify-center min-h-40 relative overflow-hidden">
+        {state === 'loading' && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 size={24} className="animate-spin text-gray-600" />
+          </div>
+        )}
+        {state === 'error' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-gray-600">
+            <ImageOff size={28} />
+            <span className="text-xs">Brak aktualnej klatki RTSP. Strumien moze byc jeszcze zestawiany.</span>
+          </div>
+        )}
+        <canvas
+          ref={canvasRef}
+          className={`w-full h-full object-cover ${state === 'ok' ? 'opacity-100' : 'opacity-0 absolute'}`}
+        />
+      </div>
+      <p className="text-[11px] text-gray-500">{runtime?.message || 'Podglad live z aktualnie przetwarzanego strumienia RTSP.'}</p>
+    </div>
+  )
+}
+
+export default function Dashboard() {
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [detections, setDetections] = useState<Detection[]>([])
+  const [motion, setMotion] = useState<Record<number, MotionEvent>>({})
+
+  const dashboardCameras = cameras.filter(cam => cam.enabled)
+
+  const loadCameras = useCallback(() => {
+    getCameras().then(setCameras).catch(() => {})
+  }, [])
+
+  const loadDetections = useCallback(() => {
+    getDetections().then(setDetections).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    loadCameras()
+    const timer = window.setInterval(loadCameras, CAMERAS_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [loadCameras])
+
+  useEffect(() => {
+    loadDetections()
+    const timer = window.setInterval(loadDetections, DETECTIONS_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [loadDetections])
+
+  useEffect(() => {
+    const es = new EventSource('api/motion/events')
+    es.onmessage = (e) => {
+      const ev: MotionEvent = JSON.parse(e.data)
+      if (ev.cam_name) setMotion(current => ({ ...current, [ev.cam_id]: ev }))
+    }
+    return () => es.close()
+  }, [])
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-panel rounded-xl p-4 border border-white/5 flex flex-col gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+          Kamery <span className="ml-1 bg-slate-600 text-white rounded-full px-2 py-0.5 text-xs">{dashboardCameras.length}</span>
+        </h2>
+
+        {dashboardCameras.length === 0 ? (
+          <div className="rounded-lg border border-white/5 bg-black/20 min-h-40 flex items-center justify-center">
+            <p className="text-sm text-gray-500">Brak aktywnych kamer</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {dashboardCameras.map(cam => {
+              const motionEvent = motion[cam.id]
+              const motionPct = motionEvent?.status === 'stopped' ? 0 : (motionEvent?.pct ?? 0)
+
+              return (
+                <div key={cam.id} className="rounded-xl border border-white/5 bg-black/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-200">{cam.name}</p>
+                      <p className="text-[11px] text-gray-500 font-mono truncate">{cam.rtsp_url || cam.snapshot_url}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white/5 border border-white/10 px-2.5 py-1 text-[11px] text-gray-400">
+                      {cam.rtsp_url ? 'RTSP live' : 'HTTP snapshot'}
+                    </span>
+                  </div>
+
+                  {cam.rtsp_url ? (
+                    <>
+                      <RtspPreview cameraId={cam.id} runtime={motionEvent} />
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-gray-400">
+                          <span>Ruch RTSP</span>
+                          <span>{motionPct.toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-200 ${motionPct > 20 ? 'bg-red-500' : motionPct > 5 ? 'bg-yellow-500' : 'bg-slate-500'}`}
+                            style={{ width: `${Math.min(motionPct, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <SnapshotPreview cameraId={cam.id} cameraName={cam.name} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-panel rounded-xl p-4 border border-white/5 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+            Wykrycia <span className="ml-1 bg-slate-600 text-white rounded-full px-2 py-0.5 text-xs">{detections.length}</span>
+          </h2>
+          <button
+            onClick={() => { clearDetections().catch(() => {}); setDetections([]) }}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-400 transition-colors"
+          >
+            <Trash2 size={12} /> Wyczysc
+          </button>
+        </div>
+
+        {detections.length === 0 ? (
+          <p className="text-gray-500 text-sm text-center py-8">Brak wykryc - nasluchiwanie...</p>
+        ) : (
+          <div className="overflow-auto max-h-80">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 border-b border-white/10">
+                  <th className="pb-2 pr-3">Tablica</th>
+                  <th className="pb-2 pr-3">Kamera</th>
+                  <th className="pb-2 pr-3">Pewnosc</th>
+                  <th className="pb-2">Czas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detections.map(d => (
+                  <tr key={d.id} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-2 pr-3">
+                      <span className="font-mono font-bold tracking-widest bg-gray-700 px-2 py-0.5 rounded text-white text-sm">{d.plate}</span>
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-gray-400">{d.camera_name || '-'}</td>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-slate-400 rounded-full" style={{ width: `${d.confidence}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400">{d.confidence}%</span>
+                      </div>
+                    </td>
+                    <td className="py-2 text-xs text-gray-400">{format(new Date(d.detected_at), 'HH:mm:ss')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

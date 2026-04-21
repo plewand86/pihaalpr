@@ -1,0 +1,29 @@
+name: "PiHA LPR"
+description: "Rozpoznawanie tablic rejestracyjnych – snapshot HTTP → zewnętrzny API LPR → MQTT / HA"
+version: "2.33.13"
+slug: "pihaalpr"
+url: "https://github.com/plewand86/pihaalpr"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+homeassistant_api: true
+services:
+  - mqtt:need
+ingress: true
+ingress_port: 8090
+panel_icon: mdi:car-search
+panel_title: "LPR"
+ports:
+  8090/tcp: 8090
+ports_description:
+  8090/tcp: "PiHA LPR Web UI"
+map:
+  - share:rw
+options:
+  log_level: "info"
+  language: "pl"
+schema:
+  log_level: "list(debug|info|warning|error)"
+  language: "list(pl|en)"

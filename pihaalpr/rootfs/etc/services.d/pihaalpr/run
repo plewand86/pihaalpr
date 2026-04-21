@@ -1,0 +1,32 @@
+#!/usr/bin/with-contenv bashio
+set -e
+
+LOG_LEVEL=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('/data/options.json'))
+    print(d.get('log_level', 'info'))
+except Exception:
+    print('info')
+")
+
+LANGUAGE=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('/data/options.json'))
+    print(d.get('language', 'pl'))
+except Exception:
+    print('pl')
+")
+
+export HA_URL="http://supervisor/core"
+export HA_TOKEN="${SUPERVISOR_TOKEN}"
+export DATA_DIR="/data"
+export STATIC_DIR="/app/frontend/dist"
+export LOG_LEVEL="${LOG_LEVEL}"
+export LANGUAGE="${LANGUAGE}"
+
+mkdir -p /data
+
+cd /app
+exec uvicorn backend.main:app --host 0.0.0.0 --port 8090 --log-level "${LOG_LEVEL}"
