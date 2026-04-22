@@ -26,8 +26,8 @@ def _get_setting(key: str, default: str = "") -> str:
         return row.value if row else default
 
 
-async def _process_detection(cam: Camera, plate: str, conf: float) -> None:
-    await _process_detection_by_plate(plate, conf, cam.name)
+async def _process_detection(cam: Camera, plate: str, conf: float, image_bytes: bytes | None = None) -> None:
+    await _process_detection_by_plate(plate, conf, cam.name, image_bytes=image_bytes)
 
 
 async def _capture_camera(cam: Camera, lpr_url: str, lpr_key: str, min_conf: int, min_chars: int, min_width: int) -> None:
@@ -48,7 +48,7 @@ async def _capture_camera(cam: Camera, lpr_url: str, lpr_key: str, min_conf: int
             log.debug("[%s] Odrzucono %s — za mała szerokość (%d < %d)", cam.name, plate, r.get("width", 0), min_width)
             continue
         log.info("[%s] Tablica: %s (%.1f%%)", cam.name, plate, conf)
-        await _process_detection(cam, plate, conf)
+        await _process_detection(cam, plate, conf, image_bytes=image)
 
 
 async def _run_capture() -> None:
@@ -130,9 +130,14 @@ async def simulate_detection(plate: str, camera_name: str = "test") -> None:
 _MAX_DETECTIONS = 100
 
 
-async def _process_detection_by_plate(plate: str, conf: float, camera_name: str) -> None:
+async def _process_detection_by_plate(
+    plate: str,
+    conf: float,
+    camera_name: str,
+    image_bytes: bytes | None = None,
+) -> None:
     with get_session() as session:
-        session.add(Detection(plate=plate, confidence=conf, camera_name=camera_name))
+        session.add(Detection(plate=plate, confidence=conf, camera_name=camera_name, image_data=image_bytes))
         session.commit()
         # Zachowaj tylko ostatnie _MAX_DETECTIONS wpisów
         keep_ids = session.exec(

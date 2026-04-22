@@ -1,6 +1,6 @@
 name: "PiHA LPR"
 description: "Rozpoznawanie tablic rejestracyjnych – snapshot HTTP → zewnętrzny API LPR → MQTT / HA"
-version: "2.33.14"
+version: "2.33.15"
 slug: "pihaalpr"
 url: "https://github.com/plewand86/pihaalpr"
 arch:

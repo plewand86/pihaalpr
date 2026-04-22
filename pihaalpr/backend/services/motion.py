@@ -475,7 +475,7 @@ async def _send_to_lpr(
             continue
         source_label = "Snapshot po ruchu" if use_snapshot else "RTSP"
         log.info("[%s] %s tablica: %s (%.1f%%)", cam_name, source_label, plate, conf)
-        await scheduler._process_detection_by_plate(plate, conf, cam_name)
+        await scheduler._process_detection_by_plate(plate, conf, cam_name, image_bytes=image_bytes)
 
 
 def start_camera(

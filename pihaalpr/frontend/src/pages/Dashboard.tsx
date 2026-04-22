@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImageOff, Loader2, Trash2 } from 'lucide-react'
+import { ImageOff, Loader2, Search, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
 
-import { Camera, Detection, clearDetections, getCameras, getDetections, getMotionFrameUrl, getSnapshotUrl } from '../api/client'
+import { Camera, Detection, clearDetections, getCameras, getDetectionImageUrl, getDetections, getMotionFrameUrl, getSnapshotUrl } from '../api/client'
 
 interface MotionEvent {
   cam_id: number
@@ -19,6 +19,18 @@ const DETECTIONS_REFRESH_MS = 1000
 const SNAPSHOT_REFRESH_MS = 5000
 const LIVE_FRAME_POLL_MS = 500
 const LIVE_FRAME_ERROR_AFTER_MS = 4000
+
+function parseDetectionDate(value: string) {
+  if (!value) return new Date(NaN)
+  if (/([zZ]|[+-]\d{2}:\d{2})$/.test(value)) return new Date(value)
+  return new Date(`${value}Z`)
+}
+
+function formatDetectionTime(value: string) {
+  const date = parseDetectionDate(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return format(date, 'HH:mm:ss')
+}
 
 function clearCanvas(canvas: HTMLCanvasElement | null) {
   if (!canvas) return
@@ -184,6 +196,8 @@ export default function Dashboard() {
   const [cameras, setCameras] = useState<Camera[]>([])
   const [detections, setDetections] = useState<Detection[]>([])
   const [motion, setMotion] = useState<Record<number, MotionEvent>>({})
+  const [selectedDetection, setSelectedDetection] = useState<Detection | null>(null)
+  const [detectionImageState, setDetectionImageState] = useState<PreviewState>('loading')
 
   const dashboardCameras = cameras.filter(cam => cam.enabled)
 
@@ -215,6 +229,17 @@ export default function Dashboard() {
     }
     return () => es.close()
   }, [])
+
+  useEffect(() => {
+    if (!selectedDetection) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedDetection(null)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectedDetection])
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -292,6 +317,7 @@ export default function Dashboard() {
               <thead>
                 <tr className="text-left text-xs text-gray-500 border-b border-white/10">
                   <th className="pb-2 pr-3">Tablica</th>
+                  <th className="pb-2 pr-3">Podglad</th>
                   <th className="pb-2 pr-3">Kamera</th>
                   <th className="pb-2 pr-3">Pewnosc</th>
                   <th className="pb-2">Czas</th>
@@ -303,6 +329,21 @@ export default function Dashboard() {
                     <td className="py-2 pr-3">
                       <span className="font-mono font-bold tracking-widest bg-gray-700 px-2 py-0.5 rounded text-white text-sm">{d.plate}</span>
                     </td>
+                    <td className="py-2 pr-3">
+                      {d.has_image ? (
+                        <button
+                          onClick={() => {
+                            setSelectedDetection(d)
+                            setDetectionImageState('loading')
+                          }}
+                          className="flex items-center gap-1 text-xs text-slate-300 hover:text-white transition-colors"
+                        >
+                          <Search size={12} /> Zdjecie
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-600">Brak</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-3 text-xs text-gray-400">{d.camera_name || '-'}</td>
                     <td className="py-2 pr-3">
                       <div className="flex items-center gap-2">
@@ -312,7 +353,7 @@ export default function Dashboard() {
                         <span className="text-xs text-gray-400">{d.confidence}%</span>
                       </div>
                     </td>
-                    <td className="py-2 text-xs text-gray-400">{format(new Date(d.detected_at), 'HH:mm:ss')}</td>
+                    <td className="py-2 text-xs text-gray-400">{formatDetectionTime(d.detected_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -320,6 +361,55 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {selectedDetection && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSelectedDetection(null)}
+        >
+          <div
+            className="w-full max-w-5xl bg-panel border border-white/10 rounded-xl overflow-hidden shadow-2xl"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-200">Wykrycie {selectedDetection.plate}</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {selectedDetection.camera_name || '-'} - {formatDetectionTime(selectedDetection.detected_at)} - {selectedDetection.confidence}%
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedDetection(null)}
+                className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                title="Zamknij"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="bg-black/60 min-h-[20rem] max-h-[75vh] flex items-center justify-center relative">
+              {detectionImageState === 'loading' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 size={28} className="animate-spin text-gray-500" />
+                </div>
+              )}
+              {detectionImageState === 'error' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
+                  <ImageOff size={30} />
+                  <span className="text-sm">Nie udalo sie pobrac zdjecia dla tego wykrycia.</span>
+                </div>
+              )}
+              <img
+                src={`${getDetectionImageUrl(selectedDetection.id)}?t=${encodeURIComponent(selectedDetection.detected_at)}`}
+                alt={`Wykrycie ${selectedDetection.plate}`}
+                className={`max-w-full max-h-[75vh] ${detectionImageState === 'ok' ? 'opacity-100' : 'opacity-0 absolute'}`}
+                onLoad={() => setDetectionImageState('ok')}
+                onError={() => setDetectionImageState('error')}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

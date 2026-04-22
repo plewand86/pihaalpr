@@ -8,6 +8,7 @@ export interface Detection {
   confidence: number
   camera_name: string
   detected_at: string
+  has_image: boolean
 }
 
 export interface AppSettings {
@@ -136,6 +137,7 @@ export const deleteWhitelistEntry = (id: number) => api.delete(`/whitelist/${id}
 export const testWhitelistEntry = (id: number) => api.post(`/whitelist/${id}/test`).then(r => r.data)
 
 export const getDetections = (limit = 100) => api.get<Detection[]>(`/detections?limit=${limit}`).then(r => r.data)
+export const getDetectionImageUrl = (detectionId: number) => `api/detections/${detectionId}/image`
 export const clearDetections = () => api.delete('/detections').then(r => r.data)
 export const triggerCapture = () => api.post('/capture/trigger').then(r => r.data)
 export const getSnapshotUrl = (cameraId?: number) =>

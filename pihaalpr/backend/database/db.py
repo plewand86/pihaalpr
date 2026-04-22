@@ -11,6 +11,7 @@ _MIGRATIONS = [
     "ALTER TABLE camera ADD COLUMN rtsp_auto_start BOOLEAN NOT NULL DEFAULT 1",
     "ALTER TABLE camera ADD COLUMN rtsp_use_snapshot BOOLEAN NOT NULL DEFAULT 0",
     "ALTER TABLE camera ADD COLUMN motion_threshold INTEGER NOT NULL DEFAULT 10",
+    "ALTER TABLE detection ADD COLUMN image_data BLOB",
     "ALTER TABLE whitelist ADD COLUMN dummy INTEGER",
 ]
 
