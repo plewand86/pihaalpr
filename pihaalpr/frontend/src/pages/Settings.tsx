@@ -25,7 +25,7 @@ function getLogKindMeta(kind: MqttEvent['kind']) {
 
 export default function Settings() {
   const [form, setForm] = useState<AppSettings>({
-    lpr_api_url: 'https://analytics.app4isp.pl/api/',
+    lpr_api_url: 'https://api-alpr.app4isp.pl/',
     lpr_api_key: '',
     min_confidence: 80,
     min_chars: 5,
@@ -104,7 +104,7 @@ export default function Settings() {
                 type="url"
                 value={form.lpr_api_url}
                 onChange={e => setForm(f => ({ ...f, lpr_api_url: e.target.value }))}
-                placeholder="https://analytics.app4isp.pl/api/"
+                placeholder="https://api-alpr.app4isp.pl/"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500"
               />
             </label>

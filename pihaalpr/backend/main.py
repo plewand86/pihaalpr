@@ -14,7 +14,7 @@ from backend.routers import cameras, capture, detections, ha_entities, motion as
 from backend.services import ha, motion, mqtt, scheduler
 
 log = logging.getLogger("main")
-APP_VERSION = "2.33.13"
+APP_VERSION = "2.33.14"
 
 
 @asynccontextmanager

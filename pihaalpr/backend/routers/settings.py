@@ -9,7 +9,7 @@ EDITABLE_KEYS = {"lpr_api_url", "lpr_api_key", "min_confidence", "min_chars", "m
 
 
 class SettingsPayload(BaseModel):
-    lpr_api_url: str = "https://analytics.app4isp.pl/api/"
+    lpr_api_url: str = "https://api-alpr.app4isp.pl/"
     lpr_api_key: str = ""
     min_confidence: int = 80
     min_chars: int = 5
@@ -34,7 +34,7 @@ def _set(key: str, value: str) -> None:
         session.commit()
 
 
-DEFAULTS = {"lpr_api_url": "https://analytics.app4isp.pl/api/", "min_confidence": "80", "min_chars": "5", "min_width": "0", "mqtt_topic": "pihaalpr"}
+DEFAULTS = {"lpr_api_url": "https://api-alpr.app4isp.pl/", "min_confidence": "80", "min_chars": "5", "min_width": "0", "mqtt_topic": "pihaalpr"}
 
 
 @router.get("")
