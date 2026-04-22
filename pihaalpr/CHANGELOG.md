@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.33.16
+- Poszerzono sekcje wykryc w dashboardzie i dodano oznaczenie tablic z bialej listy.
+- Dodano przycisk szybkiego dodawania wykrytej tablicy do bialej listy z uzupelnionym numerem.
+- Przeniesiono karte MQTT i logow pod karte API oraz pokazano stan konfiguracji klucza API.
+- README jest teraz dostepny w wersji polskiej i angielskiej.
+
 ## 2.33.15
 - Poprawiono czas wyswietlany przy wykryciach w dashboardzie.
 - Dodano podglad zdjecia wykrycia w modalu po kliknieciu w liste wykryc.

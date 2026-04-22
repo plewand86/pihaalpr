@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImageOff, Loader2, Search, Trash2, X } from 'lucide-react'
+import { ImageOff, Loader2, Plus, Search, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
 
-import { Camera, Detection, clearDetections, getCameras, getDetectionImageUrl, getDetections, getMotionFrameUrl, getSnapshotUrl } from '../api/client'
+import { Camera, Detection, clearDetections, getCameras, getDetectionImageUrl, getDetections, getMotionFrameUrl, getSnapshotUrl, getWhitelist } from '../api/client'
 
 interface MotionEvent {
   cam_id: number
@@ -193,9 +194,11 @@ function RtspPreview({ cameraId, runtime }: { cameraId: number; runtime?: Motion
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [cameras, setCameras] = useState<Camera[]>([])
   const [detections, setDetections] = useState<Detection[]>([])
   const [motion, setMotion] = useState<Record<number, MotionEvent>>({})
+  const [whitelistPlates, setWhitelistPlates] = useState<Record<string, boolean>>({})
   const [selectedDetection, setSelectedDetection] = useState<Detection | null>(null)
   const [detectionImageState, setDetectionImageState] = useState<PreviewState>('loading')
 
@@ -209,6 +212,19 @@ export default function Dashboard() {
     getDetections().then(setDetections).catch(() => {})
   }, [])
 
+  const loadWhitelist = useCallback(() => {
+    getWhitelist()
+      .then(entries => {
+        const activePlates = Object.fromEntries(
+          entries
+            .filter(entry => entry.enabled)
+            .map(entry => [entry.plate.trim().toUpperCase(), true]),
+        )
+        setWhitelistPlates(activePlates)
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     loadCameras()
     const timer = window.setInterval(loadCameras, CAMERAS_REFRESH_MS)
@@ -220,6 +236,12 @@ export default function Dashboard() {
     const timer = window.setInterval(loadDetections, DETECTIONS_REFRESH_MS)
     return () => window.clearInterval(timer)
   }, [loadDetections])
+
+  useEffect(() => {
+    loadWhitelist()
+    const timer = window.setInterval(loadWhitelist, CAMERAS_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [loadWhitelist])
 
   useEffect(() => {
     const es = new EventSource('api/motion/events')
@@ -242,7 +264,7 @@ export default function Dashboard() {
   }, [selectedDetection])
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-6 items-start">
       <div className="bg-panel rounded-xl p-4 border border-white/5 flex flex-col gap-3">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
           Kamery <span className="ml-1 bg-slate-600 text-white rounded-full px-2 py-0.5 text-xs">{dashboardCameras.length}</span>
@@ -266,7 +288,7 @@ export default function Dashboard() {
                       <p className="text-[11px] text-gray-500 font-mono truncate">{cam.rtsp_url || cam.snapshot_url}</p>
                     </div>
                     <span className="shrink-0 rounded-full bg-white/5 border border-white/10 px-2.5 py-1 text-[11px] text-gray-400">
-                      {cam.rtsp_url ? 'RTSP live' : 'HTTP snapshot'}
+                      {cam.rtsp_url ? 'RTSP Live' : 'HTTP Live'}
                     </span>
                   </div>
 
@@ -312,52 +334,90 @@ export default function Dashboard() {
         {detections.length === 0 ? (
           <p className="text-gray-500 text-sm text-center py-8">Brak wykryc - nasluchiwanie...</p>
         ) : (
-          <div className="overflow-auto max-h-80">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-500 border-b border-white/10">
-                  <th className="pb-2 pr-3">Tablica</th>
-                  <th className="pb-2 pr-3">Podglad</th>
-                  <th className="pb-2 pr-3">Kamera</th>
-                  <th className="pb-2 pr-3">Pewnosc</th>
-                  <th className="pb-2">Czas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detections.map(d => (
-                  <tr key={d.id} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="py-2 pr-3">
-                      <span className="font-mono font-bold tracking-widest bg-gray-700 px-2 py-0.5 rounded text-white text-sm">{d.plate}</span>
-                    </td>
-                    <td className="py-2 pr-3">
+          <div className="overflow-auto max-h-[36rem] pr-1 space-y-3">
+            {detections.map(d => {
+              const isWhitelisted = Boolean(whitelistPlates[d.plate.trim().toUpperCase()])
+
+              return (
+                <div
+                  key={d.id}
+                  className={`rounded-xl border p-3 transition-colors ${
+                    isWhitelisted
+                      ? 'border-green-500/30 bg-green-500/5'
+                      : 'border-red-500/15 bg-red-500/[0.04]'
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`font-mono font-bold tracking-widest px-2.5 py-1 rounded-lg text-sm border ${
+                            isWhitelisted
+                              ? 'bg-green-500/15 border-green-400/30 text-green-200'
+                              : 'bg-red-500/10 border-red-400/20 text-red-100'
+                          }`}
+                        >
+                          {d.plate}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            isWhitelisted
+                              ? 'bg-green-500/15 text-green-300'
+                              : 'bg-red-500/10 text-red-300'
+                          }`}
+                        >
+                          {isWhitelisted ? 'Biala lista' : 'Poza biala lista'}
+                        </span>
+                        <span className="text-xs text-gray-500">{formatDetectionTime(d.detected_at)}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-400">
+                        <span>Kamera: <span className="text-gray-300">{d.camera_name || '-'}</span></span>
+                        <div className="flex items-center gap-2">
+                          <span>Pewnosc</span>
+                          <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${isWhitelisted ? 'bg-green-400' : 'bg-slate-400'}`}
+                              style={{ width: `${d.confidence}%` }}
+                            />
+                          </div>
+                          <span className="text-gray-300">{d.confidence}%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       {d.has_image ? (
                         <button
                           onClick={() => {
                             setSelectedDetection(d)
                             setDetectionImageState('loading')
                           }}
-                          className="flex items-center gap-1 text-xs text-slate-300 hover:text-white transition-colors"
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 text-xs text-slate-200 hover:bg-white/20 transition-colors"
                         >
                           <Search size={12} /> Zdjecie
                         </button>
                       ) : (
-                        <span className="text-xs text-gray-600">Brak</span>
+                        <span className="px-2.5 py-1.5 rounded-lg bg-black/20 text-xs text-gray-500">Brak zdjecia</span>
                       )}
-                    </td>
-                    <td className="py-2 pr-3 text-xs text-gray-400">{d.camera_name || '-'}</td>
-                    <td className="py-2 pr-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-12 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                          <div className="h-full bg-slate-400 rounded-full" style={{ width: `${d.confidence}%` }} />
-                        </div>
-                        <span className="text-xs text-gray-400">{d.confidence}%</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-xs text-gray-400">{formatDetectionTime(d.detected_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+                      {isWhitelisted ? (
+                        <span className="px-2.5 py-1.5 rounded-lg bg-green-500/15 text-xs text-green-300">
+                          Na bialej liscie
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/whitelist?plate=${encodeURIComponent(d.plate.trim().toUpperCase())}`)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-green-600/80 text-xs text-white hover:bg-green-500 transition-colors"
+                        >
+                          <Plus size={12} /> Dodaj do bialej listy
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

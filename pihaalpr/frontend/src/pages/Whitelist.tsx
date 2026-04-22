@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, Edit2, Play, Plus, Trash2, X } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import EntityPicker from '../components/EntityPicker'
 import {
   WhitelistEntry,
@@ -58,6 +59,7 @@ const EMPTY_FORM: WhitelistEntryCreate = {
 }
 
 export default function Whitelist() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [entries, setEntries] = useState<WhitelistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -85,7 +87,23 @@ export default function Whitelist() {
   const load = () => getWhitelist().then(setEntries).catch(() => {}).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
 
-  const openAdd = () => { setForm(EMPTY_FORM); setEditId(null); setError(''); setShowForm(true) }
+  useEffect(() => {
+    const requestedPlate = searchParams.get('plate')?.trim().toUpperCase()
+    if (!requestedPlate) return
+
+    setForm({ ...EMPTY_FORM, plate: requestedPlate })
+    setEditId(null)
+    setError('')
+    setShowForm(true)
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const openAdd = (plate = '') => {
+    setForm({ ...EMPTY_FORM, plate: plate.trim().toUpperCase() })
+    setEditId(null)
+    setError('')
+    setShowForm(true)
+  }
 
   const openEdit = (e: WhitelistEntry) => {
     setForm({ plate: e.plate, description: e.description, ha_domain: e.ha_domain, ha_service: e.ha_service, entity_id: e.entity_id, service_data: e.service_data, enabled: e.enabled })
@@ -130,7 +148,7 @@ export default function Whitelist() {
           Biała lista{' '}
           <span className="ml-1 bg-green-700 text-white rounded-full px-2 py-0.5 text-xs">{entries.length}</span>
         </h2>
-        <button onClick={openAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm font-medium transition-colors">
+        <button onClick={() => openAdd()} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm font-medium transition-colors">
           <Plus size={14} /> Dodaj tablicę
         </button>
       </div>

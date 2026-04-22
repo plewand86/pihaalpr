@@ -37,6 +37,9 @@ export default function Settings() {
   const [msg, setMsg] = useState('')
   const [mqttLog, setMqttLog] = useState<MqttEvent[]>([])
   const logRef = useRef<HTMLDivElement>(null)
+  const apiKeyStored = form.lpr_api_key === '***'
+  const apiKeyDraft = Boolean(form.lpr_api_key.trim()) && !apiKeyStored
+  const apiKeyConfigured = apiKeyStored || apiKeyDraft
 
   useEffect(() => {
     const es = new EventSource('api/mqtt/events')
@@ -72,8 +75,7 @@ export default function Settings() {
   if (loading) return <p className="text-gray-400 text-sm">Ladowanie...</p>
 
   return (
-    <div className="max-w-7xl">
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4 items-start">
+    <div className="max-w-7xl space-y-4">
         <div className="bg-panel rounded-xl p-6 border border-white/5 space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -110,14 +112,33 @@ export default function Settings() {
             </label>
 
             <label className="block">
-              <span className="text-xs text-gray-400 mb-1 block">Klucz API <span className="text-gray-600">(pole "key" w zadaniu)</span></span>
+              <span className={`text-xs mb-1 block ${apiKeyConfigured ? 'text-gray-400' : 'text-red-300'}`}>
+                Klucz API <span className="text-gray-600">(pole "key" w zadaniu)</span>
+              </span>
               <input
                 type="password"
-                value={form.lpr_api_key === '***' ? '' : form.lpr_api_key}
+                value={apiKeyStored ? '' : form.lpr_api_key}
                 onChange={e => setForm(f => ({ ...f, lpr_api_key: e.target.value }))}
-                placeholder="np. 123123123123123123123123123123"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+                placeholder={apiKeyStored ? 'Klucz API jest juz skonfigurowany' : 'Wpisz klucz API'}
+                className={`w-full bg-white/5 border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none ${
+                  apiKeyConfigured ? 'border-white/10 focus:border-gray-500' : 'border-red-400/40 focus:border-red-400'
+                }`}
               />
+              {apiKeyStored && (
+                <p className="mt-2 text-xs text-green-300">
+                  Klucz API jest juz skonfigurowany. Wpisz nowy tylko wtedy, gdy chcesz go zmienic.
+                </p>
+              )}
+              {apiKeyDraft && (
+                <p className="mt-2 text-xs text-green-300">
+                  Nowy klucz API jest wpisany i zostanie zapisany po kliknieciu `Zapisz`.
+                </p>
+              )}
+              {!apiKeyConfigured && (
+                <p className="mt-2 text-xs text-red-300">
+                  Nie wiem, skontaktuj sie z tworca w celu uzyskania klucza API.
+                </p>
+              )}
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -213,7 +234,6 @@ export default function Settings() {
             </div>
           </div>
         </div>
-      </div>
     </div>
   )
 }
