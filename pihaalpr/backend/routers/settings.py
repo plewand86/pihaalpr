@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from backend.database.db import get_session
 from backend.models.app_setting import AppSetting, SENSITIVE_KEYS
+from backend.services import lpr_api
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -15,6 +16,11 @@ class SettingsPayload(BaseModel):
     min_chars: int = 5
     min_width: int = 0
     mqtt_topic: str = "pihaalpr"
+
+
+class SettingsTestPayload(BaseModel):
+    lpr_api_url: str = ""
+    lpr_api_key: str = ""
 
 
 def _get(key: str, default: str = "") -> str:
@@ -56,3 +62,21 @@ def update_settings(payload: SettingsPayload):
     _set("min_width", str(payload.min_width))
     _set("mqtt_topic", payload.mqtt_topic or "pihaalpr")
     return {"status": "ok"}
+
+
+@router.post("/test")
+async def test_settings(payload: SettingsTestPayload):
+    api_url = payload.lpr_api_url.strip() or _get("lpr_api_url", DEFAULTS["lpr_api_url"])
+    api_key = payload.lpr_api_key.strip()
+
+    if not api_url:
+        return {"status": "error", "detail": "URL endpointu LPR jest wymagany."}
+
+    if not api_key or api_key == "***":
+        api_key = _get("lpr_api_key", "")
+
+    if not api_key:
+        return {"status": "missing_key", "detail": "Brak klucza API do testu."}
+
+    status, detail = await lpr_api.test_api_key(api_url, api_key)
+    return {"status": status, "detail": detail}

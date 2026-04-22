@@ -20,6 +20,11 @@ export interface AppSettings {
   mqtt_topic: string
 }
 
+export interface AppSettingsTestResult {
+  status: 'ok' | 'bad_key' | 'missing_key' | 'error'
+  detail: string
+}
+
 export interface Camera {
   id: number
   name: string
@@ -74,6 +79,8 @@ export interface MotionRuntimeEvent {
 
 export const getAppSettings = () => api.get<AppSettings>('/settings').then(r => r.data)
 export const updateAppSettings = (data: AppSettings) => api.put('/settings', data).then(r => r.data)
+export const testAppSettings = (data: Pick<AppSettings, 'lpr_api_url' | 'lpr_api_key'>) =>
+  api.post<AppSettingsTestResult>('/settings/test', data).then(r => r.data)
 
 export const testSnapshot = (snapshot_url: string, username: string, password: string, camera_id?: number) =>
   api.post('capture/test', { snapshot_url, username, password, camera_id }, { responseType: 'blob' }).then(r => r.data as Blob)

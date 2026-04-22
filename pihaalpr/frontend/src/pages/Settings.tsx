@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Save, Trash2 } from 'lucide-react'
-import { AppSettings, getAppSettings, updateAppSettings } from '../api/client'
+import { AppSettings, AppSettingsTestResult, getAppSettings, testAppSettings, updateAppSettings } from '../api/client'
 
 interface MqttEvent {
   ts: string
@@ -34,7 +34,9 @@ export default function Settings() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [testingApi, setTestingApi] = useState(false)
   const [msg, setMsg] = useState('')
+  const [apiTest, setApiTest] = useState<AppSettingsTestResult | null>(null)
   const [mqttLog, setMqttLog] = useState<MqttEvent[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   const apiKeyStored = form.lpr_api_key === '***'
@@ -58,6 +60,10 @@ export default function Settings() {
     getAppSettings().then(setForm).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    setApiTest(null)
+  }, [form.lpr_api_url, form.lpr_api_key])
+
   const handleSave = async () => {
     setSaving(true)
     setMsg('')
@@ -69,6 +75,22 @@ export default function Settings() {
     } finally {
       setSaving(false)
       setTimeout(() => setMsg(''), 3000)
+    }
+  }
+
+  const handleApiTest = async () => {
+    setTestingApi(true)
+    setApiTest(null)
+    try {
+      const result = await testAppSettings({
+        lpr_api_url: form.lpr_api_url,
+        lpr_api_key: apiKeyStored ? '***' : form.lpr_api_key,
+      })
+      setApiTest(result)
+    } catch {
+      setApiTest({ status: 'error', detail: 'Nie udalo sie wykonac testu API.' })
+    } finally {
+      setTestingApi(false)
     }
   }
 
@@ -115,15 +137,25 @@ export default function Settings() {
               <span className={`text-xs mb-1 block ${apiKeyConfigured ? 'text-gray-400' : 'text-red-300'}`}>
                 Klucz API <span className="text-gray-600">(pole "key" w zadaniu)</span>
               </span>
-              <input
-                type="password"
-                value={apiKeyStored ? '' : form.lpr_api_key}
-                onChange={e => setForm(f => ({ ...f, lpr_api_key: e.target.value }))}
-                placeholder={apiKeyStored ? 'Klucz API jest juz skonfigurowany' : 'Wpisz klucz API'}
-                className={`w-full bg-white/5 border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none ${
-                  apiKeyConfigured ? 'border-white/10 focus:border-gray-500' : 'border-red-400/40 focus:border-red-400'
-                }`}
-              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                <input
+                  type="password"
+                  value={apiKeyStored ? '' : form.lpr_api_key}
+                  onChange={e => setForm(f => ({ ...f, lpr_api_key: e.target.value }))}
+                  placeholder={apiKeyStored ? 'Klucz API jest juz skonfigurowany' : 'Wpisz klucz API'}
+                  className={`w-full bg-white/5 border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none ${
+                    apiKeyConfigured ? 'border-white/10 focus:border-gray-500' : 'border-red-400/40 focus:border-red-400'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={handleApiTest}
+                  disabled={testingApi || !form.lpr_api_url.trim()}
+                  className="shrink-0 px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {testingApi ? 'Testowanie...' : 'Testuj'}
+                </button>
+              </div>
               {apiKeyStored && (
                 <p className="mt-2 text-xs text-green-300">
                   Klucz API jest juz skonfigurowany. Wpisz nowy tylko wtedy, gdy chcesz go zmienic.
@@ -137,6 +169,19 @@ export default function Settings() {
               {!apiKeyConfigured && (
                 <p className="mt-2 text-xs text-red-300">
                   Nie wiem, skontaktuj sie z tworca w celu uzyskania klucza API.
+                </p>
+              )}
+              {apiTest && (
+                <p
+                  className={`mt-2 text-xs ${
+                    apiTest.status === 'ok'
+                      ? 'text-green-300'
+                      : apiTest.status === 'missing_key'
+                        ? 'text-amber-300'
+                        : 'text-red-300'
+                  }`}
+                >
+                  {apiTest.detail}
                 </p>
               )}
             </label>

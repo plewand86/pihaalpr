@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.33.17
+- Dodano przycisk `Testuj` przy kluczu API w konfiguracji.
+- Dodano backendowy test komunikacji z API LPR z rozpoznaniem odpowiedzi `bad key`.
+- UI pokazuje, czy klucz jest nieprawidlowy, czy komunikacja z API jest poprawna.
+
 ## 2.33.16
 - Poszerzono sekcje wykryc w dashboardzie i dodano oznaczenie tablic z bialej listy.
 - Dodano przycisk szybkiego dodawania wykrytej tablicy do bialej listy z uzupelnionym numerem.
