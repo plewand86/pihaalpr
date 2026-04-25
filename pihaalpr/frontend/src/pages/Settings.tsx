@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Save, Trash2 } from 'lucide-react'
+import { Loader2, Save, Trash2 } from 'lucide-react'
 import { AppSettings, AppSettingsTestResult, getAppSettings, testAppSettings, updateAppSettings } from '../api/client'
 
 interface MqttEvent {
@@ -23,6 +23,13 @@ function getLogKindMeta(kind: MqttEvent['kind']) {
   }
 }
 
+const LICENSE_STATUS_LABEL: Record<AppSettingsTestResult['status'], string> = {
+  ok: 'Aktywna',
+  bad_key: 'Nieaktywna',
+  missing_key: 'Nieaktywna',
+  error: 'Nieaktywna',
+}
+
 export default function Settings() {
   const [form, setForm] = useState<AppSettings>({
     lpr_api_url: 'https://api-alpr.app4isp.pl/',
@@ -35,8 +42,10 @@ export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testingApi, setTestingApi] = useState(false)
+  const [licenseLoading, setLicenseLoading] = useState(true)
   const [msg, setMsg] = useState('')
   const [apiTest, setApiTest] = useState<AppSettingsTestResult | null>(null)
+  const [licenseStatus, setLicenseStatus] = useState<AppSettingsTestResult | null>(null)
   const [mqttLog, setMqttLog] = useState<MqttEvent[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   const apiKeyStored = form.lpr_api_key === '***'
@@ -64,6 +73,37 @@ export default function Settings() {
     setApiTest(null)
   }, [form.lpr_api_url, form.lpr_api_key])
 
+  useEffect(() => {
+    if (loading) return
+
+    let active = true
+
+    const runLicenseTest = async () => {
+      setLicenseLoading(true)
+      try {
+        const result = await testAppSettings({
+          lpr_api_url: form.lpr_api_url,
+          lpr_api_key: apiKeyStored ? '***' : form.lpr_api_key,
+        })
+        if (active) setLicenseStatus(result)
+      } catch {
+        if (active) {
+          setLicenseStatus({
+            status: 'error',
+            detail: 'Nie udalo sie sprawdzic statusu licencji przy otwieraniu konfiguracji.',
+          })
+        }
+      } finally {
+        if (active) setLicenseLoading(false)
+      }
+    }
+
+    void runLicenseTest()
+    return () => {
+      active = false
+    }
+  }, [loading])
+
   const handleSave = async () => {
     setSaving(true)
     setMsg('')
@@ -87,8 +127,13 @@ export default function Settings() {
         lpr_api_key: apiKeyStored ? '***' : form.lpr_api_key,
       })
       setApiTest(result)
+      setLicenseStatus(result)
+      setLicenseLoading(false)
     } catch {
-      setApiTest({ status: 'error', detail: 'Nie udalo sie wykonac testu API.' })
+      const errorResult = { status: 'error', detail: 'Nie udalo sie wykonac testu API.' } as const
+      setApiTest(errorResult)
+      setLicenseStatus(errorResult)
+      setLicenseLoading(false)
     } finally {
       setTestingApi(false)
     }
@@ -96,8 +141,39 @@ export default function Settings() {
 
   if (loading) return <p className="text-gray-400 text-sm">Ladowanie...</p>
 
+  const licenseOk = licenseStatus?.status === 'ok'
+
   return (
     <div className="max-w-7xl space-y-4">
+        <div
+          className={`rounded-xl border px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between ${
+            licenseLoading
+              ? 'bg-slate-500/10 border-slate-400/20'
+              : licenseOk
+                ? 'bg-green-500/10 border-green-400/30'
+                : 'bg-red-500/10 border-red-400/25'
+          }`}
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-300">Status licencji LPR</p>
+            <p className={`mt-1 text-sm ${licenseLoading ? 'text-gray-300' : licenseOk ? 'text-green-200' : 'text-red-200'}`}>
+              {licenseLoading ? 'Trwa jednorazowe sprawdzenie licencji...' : licenseStatus?.detail || 'Brak danych o licencji.'}
+            </p>
+          </div>
+          <div
+            className={`shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              licenseLoading
+                ? 'bg-white/10 text-gray-200'
+                : licenseOk
+                  ? 'bg-green-500/15 text-green-300'
+                  : 'bg-red-500/15 text-red-300'
+            }`}
+          >
+            {licenseLoading && <Loader2 size={14} className="animate-spin" />}
+            {licenseLoading ? 'Sprawdzanie...' : LICENSE_STATUS_LABEL[licenseStatus?.status || 'error']}
+          </div>
+        </div>
+
         <div className="bg-panel rounded-xl p-6 border border-white/5 space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

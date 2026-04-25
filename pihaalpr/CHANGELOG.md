@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.33.19
+- Dodano pasek statusu licencji LPR na gorze widoku `Konfiguracja`.
+- Przy otwarciu konfiguracji wykonywany jest jednorazowy test klucza/licencji.
+- Ręczny przycisk `Testuj` przy kluczu API odswieza tez gorny status licencji.
+
 ## 2.33.18
 - Dodano pasek statusu licencji LPR na gorze dashboardu.
 - Przy otwarciu dashboardu wykonywany jest jednorazowy test klucza/licencji.
