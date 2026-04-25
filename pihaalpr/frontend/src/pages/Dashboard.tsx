@@ -3,7 +3,7 @@ import { ImageOff, Loader2, Plus, Search, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 
-import { Camera, Detection, clearDetections, getCameras, getDetectionImageUrl, getDetections, getMotionFrameUrl, getSnapshotUrl, getWhitelist } from '../api/client'
+import { AppSettingsTestResult, Camera, Detection, clearDetections, getCameras, getDetectionImageUrl, getDetections, getMotionFrameUrl, getSnapshotUrl, getWhitelist, testAppSettings } from '../api/client'
 
 interface MotionEvent {
   cam_id: number
@@ -20,6 +20,12 @@ const DETECTIONS_REFRESH_MS = 1000
 const SNAPSHOT_REFRESH_MS = 5000
 const LIVE_FRAME_POLL_MS = 500
 const LIVE_FRAME_ERROR_AFTER_MS = 4000
+const LICENSE_STATUS_LABEL: Record<AppSettingsTestResult['status'], string> = {
+  ok: 'Aktywna',
+  bad_key: 'Nieaktywna',
+  missing_key: 'Nieaktywna',
+  error: 'Nieaktywna',
+}
 
 function parseDetectionDate(value: string) {
   if (!value) return new Date(NaN)
@@ -199,6 +205,8 @@ export default function Dashboard() {
   const [detections, setDetections] = useState<Detection[]>([])
   const [motion, setMotion] = useState<Record<number, MotionEvent>>({})
   const [whitelistPlates, setWhitelistPlates] = useState<Record<string, boolean>>({})
+  const [licenseStatus, setLicenseStatus] = useState<AppSettingsTestResult | null>(null)
+  const [licenseLoading, setLicenseLoading] = useState(true)
   const [selectedDetection, setSelectedDetection] = useState<Detection | null>(null)
   const [detectionImageState, setDetectionImageState] = useState<PreviewState>('loading')
 
@@ -244,6 +252,32 @@ export default function Dashboard() {
   }, [loadWhitelist])
 
   useEffect(() => {
+    let active = true
+
+    const runLicenseTest = async () => {
+      setLicenseLoading(true)
+      try {
+        const result = await testAppSettings({ lpr_api_url: '', lpr_api_key: '' })
+        if (active) setLicenseStatus(result)
+      } catch {
+        if (active) {
+          setLicenseStatus({
+            status: 'error',
+            detail: 'Nie udalo sie sprawdzic statusu licencji przy otwieraniu dashboardu.',
+          })
+        }
+      } finally {
+        if (active) setLicenseLoading(false)
+      }
+    }
+
+    void runLicenseTest()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
     const es = new EventSource('api/motion/events')
     es.onmessage = (e) => {
       const ev: MotionEvent = JSON.parse(e.data)
@@ -263,8 +297,40 @@ export default function Dashboard() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [selectedDetection])
 
+  const licenseOk = licenseStatus?.status === 'ok'
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-6 items-start">
+    <div className="space-y-4">
+      <div
+        className={`rounded-xl border px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between ${
+          licenseLoading
+            ? 'bg-slate-500/10 border-slate-400/20'
+            : licenseOk
+              ? 'bg-green-500/10 border-green-400/30'
+              : 'bg-red-500/10 border-red-400/25'
+        }`}
+      >
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-300">Status licencji LPR</p>
+          <p className={`mt-1 text-sm ${licenseLoading ? 'text-gray-300' : licenseOk ? 'text-green-200' : 'text-red-200'}`}>
+            {licenseLoading ? 'Trwa jednorazowe sprawdzenie licencji...' : licenseStatus?.detail || 'Brak danych o licencji.'}
+          </p>
+        </div>
+        <div
+          className={`shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
+            licenseLoading
+              ? 'bg-white/10 text-gray-200'
+              : licenseOk
+                ? 'bg-green-500/15 text-green-300'
+                : 'bg-red-500/15 text-red-300'
+          }`}
+        >
+          {licenseLoading && <Loader2 size={14} className="animate-spin" />}
+          {licenseLoading ? 'Sprawdzanie...' : LICENSE_STATUS_LABEL[licenseStatus?.status || 'error']}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-6 items-start">
       <div className="bg-panel rounded-xl p-4 border border-white/5 flex flex-col gap-3">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
           Kamery <span className="ml-1 bg-slate-600 text-white rounded-full px-2 py-0.5 text-xs">{dashboardCameras.length}</span>
@@ -470,6 +536,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.33.18
+- Dodano pasek statusu licencji LPR na gorze dashboardu.
+- Przy otwarciu dashboardu wykonywany jest jednorazowy test klucza/licencji.
+- Dashboard pokazuje, czy licencja jest aktywna, nieaktywna lub czy trwa sprawdzanie.
+
 ## 2.33.17
 - Dodano przycisk `Testuj` przy kluczu API w konfiguracji.
 - Dodano backendowy test komunikacji z API LPR z rozpoznaniem odpowiedzi `bad key`.
